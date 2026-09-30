@@ -36,3 +36,43 @@ DeviceNetworkEvents
     Devices = make_set(DeviceName)
     by RemoteHost, RMMTool
 | sort by ConnectionCount desc
+
+
+---
+| tstats summariesonly=t count min(_time) as firstTime max(_time) as lastTime
+    from datamodel=Network_Resolution
+    where nodename=DNS DNS.message_type=Query
+    by DNS.src DNS.query sourcetype
+| `drop_dm_object_name("DNS")`
+| lookup rmm_tools URI AS query OUTPUT RMM_Tool
+| search RMM_Tool=*
+| eval duration_hours = round((lastTime - firstTime) / 3600, 2)
+| where count > 10 OR duration_hours > 24
+| stats 
+    sum(count) as total_lookups
+    min(firstTime) as firstTime 
+    max(lastTime) as lastTime 
+    values(query) as domains
+    values(sourcetype) as sourcetypes
+    by src, RMM_Tool
+| eval duration_hours = round((lastTime - firstTime) / 3600, 2)
+| `security_content_ctime(firstTime)`
+| `security_content_ctime(lastTime)`
+| sort - total_lookups
+
+
+| tstats summariesonly=t count min(_time) as firstTime max(_time) as lastTime
+    from datamodel=Network_Resolution
+    where nodename=DNS DNS.message_type=Query
+    by DNS.src DNS.query
+| `drop_dm_object_name("DNS")`
+| where count > 5
+| lookup rmm_domains_base domain AS query OUTPUTNEW RMM_Tool
+| rex field=query "(?<domain_base>[^\.]+\.[^\.]+)$"
+| lookup rmm_domains_base domain AS domain_base OUTPUTNEW RMM_Tool AS RMM_Tool_base
+| eval RMM_Tool = coalesce(RMM_Tool, RMM_Tool_base)
+| search RMM_Tool=*
+| stats sum(count) as total_lookups min(firstTime) as firstTime max(lastTime) as lastTime values(query) as domains by src, RMM_Tool
+| `security_content_ctime(firstTime)`
+| `security_content_ctime(lastTime)`
+| sort - total_lookups
