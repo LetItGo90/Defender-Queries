@@ -1,149 +1,405 @@
 {
   "visualizations": {
-    "ip_lookup_table": {
-      "type": "splunk.table",
+    "viz_summary_urlhaus": {
+      "type": "splunk.singlevalue",
       "dataSources": {
-        "primary": "ip_lookup_ds"
+        "primary": "ds_urlhaus_count"
       },
-      "options": {}
+      "title": "URLhaus Matches",
+      "options": {
+        "majorColor": "#e05c5c",
+        "majorFontSize": 36,
+        "trendDisplay": "off",
+        "showSparkline": false,
+        "unit": "",
+        "underLabel": "URLhaus"
+      }
     },
-    "hash_lookup_table": {
-      "type": "splunk.table",
+    "viz_summary_threatfox": {
+      "type": "splunk.singlevalue",
       "dataSources": {
-        "primary": "hash_lookup_ds"
+        "primary": "ds_threatfox_count"
       },
-      "options": {}
+      "title": "ThreatFox Matches",
+      "options": {
+        "majorColor": "#e05c5c",
+        "majorFontSize": 36,
+        "trendDisplay": "off",
+        "showSparkline": false,
+        "unit": "",
+        "underLabel": "ThreatFox"
+      }
     },
-    "cve_lookup_table": {
-      "type": "splunk.table",
+    "viz_summary_feodo": {
+      "type": "splunk.singlevalue",
       "dataSources": {
-        "primary": "cve_lookup_ds"
+        "primary": "ds_feodo_count"
       },
-      "options": {}
+      "title": "Feodo C2 Matches",
+      "options": {
+        "majorColor": "#e05c5c",
+        "majorFontSize": 36,
+        "trendDisplay": "off",
+        "showSparkline": false,
+        "unit": "",
+        "underLabel": "Feodo C2"
+      }
     },
-    "url_lookup_table": {
+    "viz_summary_bazaar": {
+      "type": "splunk.singlevalue",
+      "dataSources": {
+        "primary": "ds_bazaar_count"
+      },
+      "title": "MalwareBazaar Matches",
+      "options": {
+        "majorColor": "#e05c5c",
+        "majorFontSize": 36,
+        "trendDisplay": "off",
+        "showSparkline": false,
+        "unit": "",
+        "underLabel": "MalwareBazaar"
+      }
+    },
+    "viz_summary_kev": {
+      "type": "splunk.singlevalue",
+      "dataSources": {
+        "primary": "ds_kev_count"
+      },
+      "title": "CISA KEV Matches",
+      "options": {
+        "majorColor": "#e05c5c",
+        "majorFontSize": 36,
+        "trendDisplay": "off",
+        "showSparkline": false,
+        "unit": "",
+        "underLabel": "CISA KEV"
+      }
+    },
+    "viz_urlhaus": {
       "type": "splunk.table",
       "dataSources": {
-        "primary": "url_lookup_ds"
+        "primary": "ds_urlhaus"
       },
-      "options": {}
+      "title": "URLhaus — Malicious URLs",
+      "options": {
+        "count": 20,
+        "dataOverlayMode": "none",
+        "drilldown": "none",
+        "columnFormat": {
+          "urlhaus_status": {
+            "data": {
+              "ranges": [
+                {
+                  "from": null,
+                  "to": null,
+                  "value": "online",
+                  "style": {
+                    "background-color": "#be2525",
+                    "color": "#ffffff"
+                  }
+                }
+              ]
+            }
+          }
+        }
+      }
+    },
+    "viz_threatfox": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_threatfox"
+      },
+      "title": "ThreatFox — IOC Feed",
+      "options": {
+        "count": 20,
+        "dataOverlayMode": "none",
+        "drilldown": "none"
+      }
+    },
+    "viz_feodo": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_feodo"
+      },
+      "title": "Feodo Tracker — C2 Block List",
+      "options": {
+        "count": 20,
+        "dataOverlayMode": "none",
+        "drilldown": "none"
+      }
+    },
+    "viz_bazaar": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_bazaar"
+      },
+      "title": "MalwareBazaar — File Hashes",
+      "options": {
+        "count": 20,
+        "dataOverlayMode": "none",
+        "drilldown": "none"
+      }
+    },
+    "viz_kev": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ds_kev"
+      },
+      "title": "CISA KEV — Known Exploited Vulnerabilities",
+      "options": {
+        "count": 20,
+        "dataOverlayMode": "none",
+        "drilldown": "none"
+      }
     }
   },
   "dataSources": {
-    "ip_lookup_ds": {
+    "ds_urlhaus_count": {
       "type": "ds.search",
       "options": {
-        "query": "| makeresults | eval search_indicator=\"$ti_input.value$\" | lookup feodo_c2.csv dst_ip AS search_indicator OUTPUT malware AS feodo_malware, c2_status, last_online AS feodo_last_seen | lookup threatfox_iocs.csv ioc AS search_indicator OUTPUT threat_type AS tf_threat_type, malware AS tf_malware, confidence_level AS tf_confidence | eval feodo_hit=if(isnotnull(feodo_malware), \"HIT\", \"MISS\") | eval threatfox_hit=if(isnotnull(tf_malware), \"HIT\", \"MISS\") | table search_indicator, feodo_hit, feodo_malware, c2_status, feodo_last_seen, threatfox_hit, tf_malware, tf_threat_type, tf_confidence"
+        "query": "| inputlookup urlhaus_iocs.csv | search url=\"*$search_term$*\" OR tags=\"*$search_term$*\" | stats count",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
       }
     },
-    "hash_lookup_ds": {
+    "ds_threatfox_count": {
       "type": "ds.search",
       "options": {
-        "query": "| makeresults | eval search_hash=\"$hash_input.value$\" | lookup malwarebazaar_hashes.csv sha256_hash AS search_hash OUTPUT signature, file_type, first_seen AS mb_first_seen | lookup threatfox_iocs.csv ioc AS search_hash OUTPUT malware AS tf_malware, threat_type AS tf_threat_type | eval bazaar_hit=if(isnotnull(signature), \"HIT\", \"MISS\") | eval threatfox_hit=if(isnotnull(tf_malware), \"HIT\", \"MISS\") | table search_hash, bazaar_hit, signature, file_type, mb_first_seen, threatfox_hit, tf_malware, tf_threat_type"
+        "query": "| inputlookup threatfox_iocs.csv | search ioc=\"*$search_term$*\" OR malware=\"*$search_term$*\" | stats count",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
       }
     },
-    "cve_lookup_ds": {
+    "ds_feodo_count": {
       "type": "ds.search",
       "options": {
-        "query": "| makeresults | eval search_cve=\"$cve_input.value$\" | lookup cisa_kev.csv cveID AS search_cve OUTPUT vendorProject, product, vulnerabilityName, shortDescription, knownRansomwareCampaignUse, dueDate, dateAdded | eval kev_hit=if(isnotnull(vendorProject), \"ON KEV\", \"NOT ON KEV\") | eval ransomware_flag=if(knownRansomwareCampaignUse==\"Known\", \"YES\", \"Unknown\") | table search_cve, kev_hit, vendorProject, product, vulnerabilityName, ransomware_flag, dueDate, dateAdded, shortDescription"
+        "query": "| inputlookup feodo_c2.csv | search dst_ip=\"*$search_term$*\" OR hostname=\"*$search_term$*\" | stats count",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
       }
     },
-    "url_lookup_ds": {
+    "ds_bazaar_count": {
       "type": "ds.search",
       "options": {
-        "query": "| makeresults | eval search_url=\"$url_input.value$\" | lookup urlhaus_iocs.csv url AS search_url OUTPUT url_status, threat, tags, dateadded AS urlhaus_dateadded | eval urlhaus_hit=if(isnotnull(threat), \"HIT\", \"MISS\") | table search_url, urlhaus_hit, url_status, threat, tags, urlhaus_dateadded"
+        "query": "| inputlookup malwarebazaar_hashes.csv | search sha256_hash=\"*$search_term$*\" OR md5_hash=\"*$search_term$*\" OR tags=\"*$search_term$*\" OR file_name=\"*$search_term$*\" | stats count",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_kev_count": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup cisa_kev.csv | search cveID=\"*$search_term$*\" OR vendorProject=\"*$search_term$*\" OR product=\"*$search_term$*\" | stats count",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_urlhaus": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup urlhaus_iocs.csv | search url=\"*$search_term$*\" OR tags=\"*$search_term$*\" | rename url AS \"URL\", urlhaus_status AS \"Status\", threat AS \"Threat\", tags AS \"Tags\", date_added AS \"Date Added\" | table URL Status Threat Tags \"Date Added\"",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_threatfox": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup threatfox_iocs.csv | search ioc=\"*$search_term$*\" OR malware=\"*$search_term$*\" | rename ioc AS \"IOC\", ioc_type AS \"IOC Type\", threat_type AS \"Threat Type\", malware AS \"Malware\", confidence_level AS \"Confidence\", first_seen AS \"First Seen\", last_seen AS \"Last Seen\" | table IOC \"IOC Type\" \"Threat Type\" Malware Confidence \"First Seen\" \"Last Seen\"",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_feodo": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup feodo_c2.csv | search dst_ip=\"*$search_term$*\" OR hostname=\"*$search_term$*\" | rename dst_ip AS \"C2 IP\", hostname AS \"Hostname\", dst_port AS \"Port\", country AS \"Country\", malware AS \"Malware\", first_seen AS \"First Seen\", last_seen AS \"Last Seen\" | table \"C2 IP\" Hostname Port Country Malware \"First Seen\" \"Last Seen\"",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_bazaar": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup malwarebazaar_hashes.csv | search sha256_hash=\"*$search_term$*\" OR md5_hash=\"*$search_term$*\" OR tags=\"*$search_term$*\" OR file_name=\"*$search_term$*\" | rename sha256_hash AS \"SHA256\", md5_hash AS \"MD5\", sha1_hash AS \"SHA1\", file_name AS \"Filename\", file_type AS \"File Type\", tags AS \"Tags\", reporter AS \"Reporter\", first_seen AS \"First Seen\" | table SHA256 MD5 SHA1 Filename \"File Type\" Tags Reporter \"First Seen\"",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
+      }
+    },
+    "ds_kev": {
+      "type": "ds.search",
+      "options": {
+        "query": "| inputlookup cisa_kev.csv | search cveID=\"*$search_term$*\" OR vendorProject=\"*$search_term$*\" OR product=\"*$search_term$*\" | rename cveID AS \"CVE\", vendorProject AS \"Vendor\", product AS \"Product\", vulnerabilityName AS \"Vulnerability\", dateAdded AS \"Date Added\", dueDate AS \"Patch Due\", shortDescription AS \"Description\" | table CVE Vendor Product Vulnerability Description \"Date Added\" \"Patch Due\"",
+        "queryParameters": {
+          "earliest": "-30d@d",
+          "latest": "now"
+        }
       }
     }
   },
   "inputs": {
-    "ti_input": {
+    "input_search_term": {
       "type": "input.text",
       "options": {
         "defaultValue": "",
-        "token": "ti_input"
+        "token": "search_term"
       },
-      "title": "IP or Domain"
-    },
-    "hash_input": {
-      "type": "input.text",
-      "options": {
-        "defaultValue": "",
-        "token": "hash_input"
-      },
-      "title": "Hash"
-    },
-    "cve_input": {
-      "type": "input.text",
-      "options": {
-        "defaultValue": "",
-        "token": "cve_input"
-      },
-      "title": "CVE ID"
-    },
-    "url_input": {
-      "type": "input.text",
-      "options": {
-        "defaultValue": "",
-        "token": "url_input"
-      },
-      "title": "URL"
+      "title": "Search IP, Domain, Hash, or CVE"
     }
   },
   "layout": {
-    "type": "absolute",
+    "type": "grid",
     "options": {
-      "width": 1440,
-      "height": 700
+      "backgroundColor": "#1a1d2b",
+      "submitButton": true,
+      "submitOnBlur": false
     },
     "structure": [
       {
-        "item": "ip_lookup_table",
-        "type": "block",
+        "item": "input_search_term",
+        "type": "input",
         "position": {
-          "x": 20,
-          "y": 100,
-          "w": 680,
-          "h": 250
+          "x": 0,
+          "y": 0,
+          "w": 1440,
+          "h": 60
         }
       },
       {
-        "item": "hash_lookup_table",
+        "item": "viz_summary_urlhaus",
         "type": "block",
         "position": {
-          "x": 720,
-          "y": 100,
-          "w": 680,
-          "h": 250
+          "x": 0,
+          "y": 80,
+          "w": 288,
+          "h": 100
         }
       },
       {
-        "item": "cve_lookup_table",
+        "item": "viz_summary_threatfox",
         "type": "block",
         "position": {
-          "x": 20,
-          "y": 370,
-          "w": 680,
-          "h": 250
+          "x": 288,
+          "y": 80,
+          "w": 288,
+          "h": 100
         }
       },
       {
-        "item": "url_lookup_table",
+        "item": "viz_summary_feodo",
         "type": "block",
         "position": {
-          "x": 720,
-          "y": 370,
-          "w": 680,
-          "h": 250
+          "x": 576,
+          "y": 80,
+          "w": 288,
+          "h": 100
+        }
+      },
+      {
+        "item": "viz_summary_bazaar",
+        "type": "block",
+        "position": {
+          "x": 864,
+          "y": 80,
+          "w": 288,
+          "h": 100
+        }
+      },
+      {
+        "item": "viz_summary_kev",
+        "type": "block",
+        "position": {
+          "x": 1152,
+          "y": 80,
+          "w": 288,
+          "h": 100
+        }
+      },
+      {
+        "item": "viz_urlhaus",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 200,
+          "w": 1440,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_threatfox",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 520,
+          "w": 1440,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_feodo",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 840,
+          "w": 1440,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_bazaar",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 1160,
+          "w": 1440,
+          "h": 300
+        }
+      },
+      {
+        "item": "viz_kev",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 1480,
+          "w": 1440,
+          "h": 300
         }
       }
     ],
     "globalInputs": [
-      "ti_input",
-      "hash_input",
-      "cve_input",
-      "url_input"
+      "input_search_term"
     ]
   },
-  "title": "TI Lookup Dashboard",
-  "description": "Lookup indicators against abuse.ch feeds and CISA KEV"
+  "title": "Unified Threat Intelligence Lookup",
+  "description": "Search open-source threat feeds by IP, domain, hash, or CVE. Sources: URLhaus, ThreatFox, Feodo Tracker, MalwareBazaar, CISA KEV.",
+  "defaults": {
+    "dataSources": {
+      "ds.search": {
+        "options": {
+          "queryParameters": {
+            "earliest": "-30d@d",
+            "latest": "now"
+          }
+        }
+      }
+    }
+  }
 }
