@@ -202,3 +202,17 @@ DeviceNetworkEvents
     Devices = dcount(DeviceId)
     by RemoteHost, RMMTool
 | sort by Devices desc, ConnectionCount desc
+
+
+
+DeviceNetworkEvents
+| where Timestamp > ago(7d)
+| where ActionType == "ConnectionSuccess"
+| where RemoteUrl has_any ("netbird.io", "netbird", "my-sharepoint-inc.com", "my1cloudlive.com", "my2cloudlive.com")
+| summarize 
+    FirstSeen = min(Timestamp),
+    LastSeen = max(Timestamp),
+    ConnectionCount = count(),
+    RemoteUrls = make_set(RemoteUrl)
+    by DeviceName, DeviceId
+| sort by ConnectionCount desc
