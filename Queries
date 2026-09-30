@@ -1,39 +1,41 @@
+let RMMSoftware = dynamic([
+    // High risk - commonly abused
+    "anydesk", "teamviewer", "screenconnect", "connectwise",
+    "rustdesk", "meshcentral", "meshagent", "splashtop", 
+    "supremo", "ultraviewer", "ammyy", "aeroadmin",
+    "netbird", "tailscale", "zerotier", "ngrok",
+    "todesk", "sunlogin", "hoptodesk", "litemanager",
+    "remotepc", "action1", "getscreen", "fleetdeck",
+    "simplehelp", "bomgar", "beyondtrust", "radmin",
+    // VNC variants
+    "tightvnc", "realvnc", "ultravnc", "vnc_viewer", "tigervnc", "turbovnc",
+    // Enterprise RMM (may be legit)
+    "atera", "syncro", "ninja", "ninjarmm", "datto", "kaseya",
+    "pulseway", "n-able", "nable", "logmein", "gotoassist", "gotoassist",
+    "level", "tacticalrmm", "comodo", "itarian", "zoho_assist",
+    "manageengine", "tanium", "ivanti", "intune",
+    // Tunneling
+    "localxpose", "devtunnel", "remote.it", "pitunnel",
+    "tmate", "shellhub", "teleport",
+    // Other RMM/remote
+    "absolute", "computrace", "acronis", "parsec", "parallels",
+    "nomachine", "jumpdesktop", "jumpto", "duetdisplay",
+    "mremoteng", "royalts", "remoteutilities", "remote_utilities",
+    "chrome_remote_desktop", "quick_assist", "dwservice",
+    "iperius", "fixme.it", "fastviewer", "mikogo",
+    "zoho", "freshservice", "freshworks"
+]);
+let SanctionedRMM = dynamic([
+    "absolute",      // Your geofencing tool
+    "intune",        // Probably sanctioned
+    "manageengine"   // Check with IT
+    // Add your approved tools here
+]);
 DeviceTvmSoftwareInventory
-| where SoftwareName has_any (
-    "anydesk", "teamviewer", "screenconnect", "connectwise", 
-    "rustdesk", "meshcentral", "splashtop", "atera",
-    "supremo", "ultraviewer", "ammyy", "aeroadmin",
-    "getscreen", "fleetdeck", "simplehelp", "bomgar",
-    "netbird", "tailscale", "zerotier", "ngrok",
-    "todesk", "sunlogin", "hoptodesk", "litemanager",
-    "remotepc", "action1", "level", "syncro",
-    "ninja", "datto", "kaseya", "pulseway",
-    "logmein", "gotoassist", "beyondtrust", "radmin",
-    "vnc", "realvnc", "tightvnc", "ultravnc",
-    "remoteutilities", "remote utilities", "meshagent",
-    "tacticalrmm", "comodo", "itarian", "zoho assist"
-)
-| summarize Devices = make_set(DeviceName) by SoftwareName, SoftwareVendor
-| extend DeviceCount = array_length(Devices)
-| sort by DeviceCount desc
-
-DeviceProcessEvents
-| where Timestamp > ago(7d)
-| where FileName has_any (
-    "anydesk", "teamviewer", "screenconnect", 
-    "rustdesk", "meshagent", "splashtop", "atera",
-    "supremo", "ultraviewer", "ammyy", "aeroadmin",
-    "netbird", "tailscale", "zerotier", "ngrok",
-    "todesk", "sunlogin", "hoptodesk", "litemanager",
-    "remotepc", "action1", "syncromsp",
-    "logmein", "gotoassist", "bomgar", "radmin",
-    "tvnserver", "vncserver", "winvnc",
-    "remoteutilities", "rutserv", "rfusclient",
-    "tacticalrmm", "meshcentral"
-)
+| where SoftwareName has_any (RMMSoftware)
+| where not(SoftwareName has_any (SanctionedRMM))
 | summarize 
-    FirstSeen = min(Timestamp),
-    LastSeen = max(Timestamp),
-    ExecutionCount = count()
-    by DeviceName, FileName, FolderPath
-| sort by ExecutionCount desc
+    Devices = make_set(DeviceName),
+    DeviceCount = dcount(DeviceName)
+    by SoftwareName, SoftwareVendor
+| sort by DeviceCount desc
