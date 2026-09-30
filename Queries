@@ -1,110 +1,20 @@
-{
-  "visualizations": {
-    "viz_total_hits": {
-      "type": "splunk.singlevalue",
-      "dataSources": {
-        "primary": "ds_hit_count"
-      },
-      "title": "",
-      "options": {
-        "majorColor": "> majorValue | rangeValue(majorColorEditorConfig)",
-        "majorFontSize": 48,
-        "trendDisplay": "off",
-        "showSparkline": false,
-        "unit": "hits",
-        "underLabel": "Total Matches Across All Feeds",
-        "majorColorEditorConfig": [
-          {
-            "value": "#3c763d",
-            "to": 1
-          },
-          {
-            "value": "#d9534f",
-            "from": 1
-          }
-        ]
-      }
-    },
-    "viz_results": {
-      "type": "splunk.table",
-      "dataSources": {
-        "primary": "ds_unified"
-      },
-      "title": "",
-      "options": {
-        "count": 50,
-        "dataOverlayMode": "none",
-        "drilldown": "none"
-      }
-    }
-  },
-  "dataSources": {
-    "ds_unified": {
-      "type": "ds.search",
-      "options": {
-        "query": "| inputlookup urlhaus_iocs.csv | search url=\"*$search_term$*\" OR tags=\"*$search_term$*\" | eval Source=\"URLhaus\", IOC=url, Type=\"URL\", Detail=threat, Info=tags, \"First Seen\"=dateadded | table Source IOC Type Detail Info \"First Seen\" | append [| inputlookup threatfox_iocs.csv | search ioc=\"*$search_term$*\" OR malware=\"*$search_term$*\" | eval Source=\"ThreatFox\", IOC=ioc, Type=ioc_type, Detail=malware, Info=threat_type, \"First Seen\"=first_seen_utc | table Source IOC Type Detail Info \"First Seen\"] | append [| inputlookup feodo_c2.csv | search dst_ip=\"*$search_term$*\" OR hostname=\"*$search_term$*\" | eval Source=\"Feodo C2\", IOC=dst_ip, Type=\"C2 IP\", Detail=malware, Info=hostname, \"First Seen\"=first_seen | table Source IOC Type Detail Info \"First Seen\"] | append [| inputlookup malwarebazaar_hashes.csv | search sha256_hash=\"*$search_term$*\" OR md5_hash=\"*$search_term$*\" OR tags=\"*$search_term$*\" OR file_name=\"*$search_term$*\" | eval Source=\"MalwareBazaar\", IOC=sha256_hash, Type=file_type, Detail=tags, Info=file_name, \"First Seen\"=first_seen_utc | table Source IOC Type Detail Info \"First Seen\"] | append [| inputlookup cisa_kev.csv | search cveID=\"*$search_term$*\" OR vendorProject=\"*$search_term$*\" OR product=\"*$search_term$*\" | eval Source=\"CISA KEV\", IOC=cveID, Type=product, Detail=vulnerabilityName, Info=vendorProject, \"First Seen\"=dateAdded | table Source IOC Type Detail Info \"First Seen\"] | sort Source",
-        "queryParameters": {
-          "earliest": "-24h@h",
-          "latest": "now"
-        }
-      }
-    },
-    "ds_hit_count": {
-      "type": "ds.search",
-      "options": {
-        "query": "| inputlookup urlhaus_iocs.csv | search url=\"*$search_term$*\" OR tags=\"*$search_term$*\" | eval Source=\"URLhaus\" | append [| inputlookup threatfox_iocs.csv | search ioc=\"*$search_term$*\" OR malware=\"*$search_term$*\" | eval Source=\"ThreatFox\"] | append [| inputlookup feodo_c2.csv | search dst_ip=\"*$search_term$*\" OR hostname=\"*$search_term$*\" | eval Source=\"Feodo C2\"] | append [| inputlookup malwarebazaar_hashes.csv | search sha256_hash=\"*$search_term$*\" OR md5_hash=\"*$search_term$*\" OR tags=\"*$search_term$*\" OR file_name=\"*$search_term$*\" | eval Source=\"MalwareBazaar\"] | append [| inputlookup cisa_kev.csv | search cveID=\"*$search_term$*\" OR vendorProject=\"*$search_term$*\" OR product=\"*$search_term$*\" | eval Source=\"CISA KEV\"] | stats count",
-        "queryParameters": {
-          "earliest": "-24h@h",
-          "latest": "now"
-        }
-      }
-    }
-  },
-  "inputs": {
-    "input_search_term": {
-      "type": "input.text",
-      "options": {
-        "defaultValue": "",
-        "token": "search_term"
-      },
-      "title": "Enter IP, Domain, Hash, or CVE"
-    }
-  },
-  "layout": {
-    "type": "absolute",
-    "options": {
-      "display": "auto-scale",
-      "backgroundColor": "#171d2a",
-      "width": 1440,
-      "height": 900,
-      "submitButton": true
-    },
-    "structure": [
-      {
-        "item": "viz_total_hits",
-        "type": "block",
-        "position": {
-          "x": 20,
-          "y": 20,
-          "w": 1400,
-          "h": 120
-        }
-      },
-      {
-        "item": "viz_results",
-        "type": "block",
-        "position": {
-          "x": 20,
-          "y": 160,
-          "w": 1400,
-          "h": 700
-        }
-      }
-    ],
-    "globalInputs": [
-      "input_search_term"
-    ]
-  },
-  "title": "Unified Threat Intelligence Lookup",
-  "description": "Single-pane IOC lookup across URLhaus, ThreatFox, Feodo Tracker, MalwareBazaar, and CISA KEV."
-}
+| inputlookup urlhaus_iocs.csv
+| search url="*$search_term$*" OR tags="*$search_term$*"
+| eval Source="URLhaus", IOC=url, Type="URL", Detail=threat, Info=tags
+| table Source IOC Type Detail Info
+| append
+    [| inputlookup threatfox_iocs.csv
+    | search ioc="*$search_term$*" OR malware="*$search_term$*"
+    | eval Source="ThreatFox", IOC=ioc, Type=ioc_type, Detail=malware, Info=threat_type
+    | table Source IOC Type Detail Info]
+| append
+    [| inputlookup feodo_c2.csv
+    | search dst_ip="*$search_term$*" OR hostname="*$search_term$*"
+    | eval Source="Feodo C2", IOC=dst_ip, Type="C2 IP", Detail=malware, Info=hostname
+    | table Source IOC Type Detail Info]
+| append
+    [| inputlookup malwarebazaar_hashes.csv
+    | search sha256_hash="*$search_term$*" OR md5_hash="*$search_term$*" OR tags="*$search_term$*"
+    | eval Source="MalwareBazaar", IOC=sha256_hash, Type=file_type, Detail=tags, Info=file_name
+    | table Source IOC Type Detail Info]
+| sort Source
