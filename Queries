@@ -1,41 +1,202 @@
-let RMMSoftware = dynamic([
-    // High risk - commonly abused
-    "anydesk", "teamviewer", "screenconnect", "connectwise",
-    "rustdesk", "meshcentral", "meshagent", "splashtop", 
-    "supremo", "ultraviewer", "ammyy", "aeroadmin",
-    "netbird", "tailscale", "zerotier", "ngrok",
-    "todesk", "sunlogin", "hoptodesk", "litemanager",
-    "remotepc", "action1", "getscreen", "fleetdeck",
-    "simplehelp", "bomgar", "beyondtrust", "radmin",
-    // VNC variants
-    "tightvnc", "realvnc", "ultravnc", "vnc_viewer", "tigervnc", "turbovnc",
-    // Enterprise RMM (may be legit)
-    "atera", "syncro", "ninja", "ninjarmm", "datto", "kaseya",
-    "pulseway", "n-able", "nable", "logmein", "gotoassist", "gotoassist",
-    "level", "tacticalrmm", "comodo", "itarian", "zoho_assist",
-    "manageengine", "tanium", "ivanti", "intune",
-    // Tunneling
-    "localxpose", "devtunnel", "remote.it", "pitunnel",
-    "tmate", "shellhub", "teleport",
-    // Other RMM/remote
-    "absolute", "computrace", "acronis", "parsec", "parallels",
-    "nomachine", "jumpdesktop", "jumpto", "duetdisplay",
-    "mremoteng", "royalts", "remoteutilities", "remote_utilities",
-    "chrome_remote_desktop", "quick_assist", "dwservice",
-    "iperius", "fixme.it", "fastviewer", "mikogo",
-    "zoho", "freshservice", "freshworks"
-]);
-let SanctionedRMM = dynamic([
-    "absolute",      // Your geofencing tool
-    "intune",        // Probably sanctioned
-    "manageengine"   // Check with IT
-    // Add your approved tools here
-]);
-DeviceTvmSoftwareInventory
-| where SoftwareName has_any (RMMSoftware)
-| where not(SoftwareName has_any (SanctionedRMM))
-| summarize 
-    Devices = make_set(DeviceName),
-    DeviceCount = dcount(DeviceName)
-    by SoftwareName, SoftwareVendor
-| sort by DeviceCount desc
+{
+  "visualizations": {
+    "ip_lookup_table": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "ip_lookup_ds"
+      },
+      "title": "IP/Domain Lookup Results"
+    },
+    "hash_lookup_table": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "hash_lookup_ds"
+      },
+      "title": "Hash Lookup Results"
+    },
+    "cve_lookup_table": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "cve_lookup_ds"
+      },
+      "title": "CVE Lookup (CISA KEV)"
+    },
+    "url_lookup_table": {
+      "type": "splunk.table",
+      "dataSources": {
+        "primary": "url_lookup_ds"
+      },
+      "title": "URL Lookup Results"
+    }
+  },
+  "dataSources": {
+    "ip_lookup_ds": {
+      "type": "ds.search",
+      "options": {
+        "query": "| makeresults | eval search_indicator=\"$ti_input$\" | lookup feodo_c2.csv dst_ip AS search_indicator OUTPUT malware AS feodo_malware, c2_status, last_online AS feodo_last_seen, first_seen_utc AS feodo_first_seen | lookup threatfox_iocs.csv ioc AS search_indicator OUTPUT threat_type AS tf_threat_type, malware AS tf_malware, confidence_level AS tf_confidence | eval feodo_hit=if(isnotnull(feodo_malware), \"✅ Feodo C2\", \"❌\") | eval threatfox_hit=if(isnotnull(tf_malware), \"✅ ThreatFox\", \"❌\") | table search_indicator, feodo_hit, feodo_malware, c2_status, feodo_last_seen, threatfox_hit, tf_malware, tf_threat_type, tf_confidence",
+        "queryParameters": {
+          "earliest": "-24h@h",
+          "latest": "now"
+        }
+      }
+    },
+    "hash_lookup_ds": {
+      "type": "ds.search",
+      "options": {
+        "query": "| makeresults | eval search_hash=\"$hash_input$\" | lookup malwarebazaar_hashes.csv sha256_hash AS search_hash OUTPUT signature, file_type, first_seen AS mb_first_seen, reporter | lookup threatfox_iocs.csv ioc AS search_hash OUTPUT malware AS tf_malware, threat_type AS tf_threat_type | eval bazaar_hit=if(isnotnull(signature), \"✅ MalwareBazaar\", \"❌\") | eval threatfox_hit=if(isnotnull(tf_malware), \"✅ ThreatFox\", \"❌\") | table search_hash, bazaar_hit, signature, file_type, mb_first_seen, threatfox_hit, tf_malware, tf_threat_type",
+        "queryParameters": {
+          "earliest": "-24h@h",
+          "latest": "now"
+        }
+      }
+    },
+    "cve_lookup_ds": {
+      "type": "ds.search",
+      "options": {
+        "query": "| makeresults | eval search_cve=\"$cve_input$\" | lookup cisa_kev.csv cveID AS search_cve OUTPUT vendorProject, product, vulnerabilityName, shortDescription, knownRansomwareCampaignUse, dueDate, dateAdded | eval kev_hit=if(isnotnull(vendorProject), \"✅ On KEV\", \"❌ Not on KEV\") | eval ransomware_flag=if(knownRansomwareCampaignUse==\"Known\", \"⚠️ YES\", \"Unknown\") | table search_cve, kev_hit, vendorProject, product, vulnerabilityName, ransomware_flag, dueDate, dateAdded, shortDescription",
+        "queryParameters": {
+          "earliest": "-24h@h",
+          "latest": "now"
+        }
+      }
+    },
+    "url_lookup_ds": {
+      "type": "ds.search",
+      "options": {
+        "query": "| makeresults | eval search_url=\"$url_input$\" | lookup urlhaus_iocs.csv url AS search_url OUTPUT url_status, threat, tags, dateadded AS urlhaus_dateadded | eval urlhaus_hit=if(isnotnull(threat), \"✅ URLhaus\", \"❌\") | table search_url, urlhaus_hit, url_status, threat, tags, urlhaus_dateadded",
+        "queryParameters": {
+          "earliest": "-24h@h",
+          "latest": "now"
+        }
+      }
+    }
+  },
+  "inputs": {
+    "ti_input": {
+      "type": "input.text",
+      "options": {
+        "defaultValue": "",
+        "token": "ti_input"
+      },
+      "title": "IP or Domain"
+    },
+    "hash_input": {
+      "type": "input.text",
+      "options": {
+        "defaultValue": "",
+        "token": "hash_input"
+      },
+      "title": "Hash (SHA256/MD5)"
+    },
+    "cve_input": {
+      "type": "input.text",
+      "options": {
+        "defaultValue": "",
+        "token": "cve_input"
+      },
+      "title": "CVE ID"
+    },
+    "url_input": {
+      "type": "input.text",
+      "options": {
+        "defaultValue": "",
+        "token": "url_input"
+      },
+      "title": "Full URL"
+    }
+  },
+  "layout": {
+    "type": "grid",
+    "options": {},
+    "structure": [
+      {
+        "item": "ti_input",
+        "type": "input",
+        "position": {
+          "x": 0,
+          "y": 0,
+          "w": 300,
+          "h": 50
+        }
+      },
+      {
+        "item": "hash_input",
+        "type": "input",
+        "position": {
+          "x": 320,
+          "y": 0,
+          "w": 300,
+          "h": 50
+        }
+      },
+      {
+        "item": "cve_input",
+        "type": "input",
+        "position": {
+          "x": 640,
+          "y": 0,
+          "w": 300,
+          "h": 50
+        }
+      },
+      {
+        "item": "url_input",
+        "type": "input",
+        "position": {
+          "x": 960,
+          "y": 0,
+          "w": 300,
+          "h": 50
+        }
+      },
+      {
+        "item": "ip_lookup_table",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 70,
+          "w": 620,
+          "h": 250
+        }
+      },
+      {
+        "item": "hash_lookup_table",
+        "type": "block",
+        "position": {
+          "x": 640,
+          "y": 70,
+          "w": 620,
+          "h": 250
+        }
+      },
+      {
+        "item": "cve_lookup_table",
+        "type": "block",
+        "position": {
+          "x": 0,
+          "y": 340,
+          "w": 620,
+          "h": 250
+        }
+      },
+      {
+        "item": "url_lookup_table",
+        "type": "block",
+        "position": {
+          "x": 640,
+          "y": 340,
+          "w": 620,
+          "h": 250
+        }
+      }
+    ],
+    "globalInputs": [
+      "ti_input",
+      "hash_input",
+      "cve_input",
+      "url_input"
+    ]
+  },
+  "title": "TI Lookup Dashboard",
+  "description": "Lookup IPs, domains, hashes, CVEs, and URLs against abuse.ch feeds and CISA KEV"
+}
