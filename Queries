@@ -130,3 +130,75 @@ DeviceNetworkEvents
 | `security_content_ctime(firstTime)`
 | `security_content_ctime(lastTime)`
 | sort - total_lookups
+
+
+
+
+
+
+let RMMList = externaldata(URI: string, RMMTool: string)
+    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv']
+    with (format="csv", ignoreFirstRecord=true)
+    | extend RawURI = tolower(trim(@"[ \t\r\n]+", URI))
+    | extend Domain = trim_end(@"\.+", case(
+        RawURI startswith "*.", replace_string(RawURI, "*.", ""),
+        RawURI startswith "*", replace_string(RawURI, "*", ""),
+        RawURI contains "*", replace_regex(RawURI, @".+?\*", ""),
+        RawURI
+    ))
+    | where isnotempty(Domain)
+    | where Domain !in ("github.com", "raw.githubusercontent.com", "ghcr.io", "objects.githubusercontent.com")
+    | distinct Domain, RMMTool;
+let RMMDomains = toscalar(RMMList | summarize make_set(Domain));
+DeviceNetworkEvents
+| where Timestamp > ago(2d)
+| where ActionType == "ConnectionSuccess"
+| where isnotempty(RemoteUrl)
+| extend RemoteHost = tolower(tostring(parse_url(case(
+    RemoteUrl startswith "http", RemoteUrl, 
+    strcat("https://", RemoteUrl)
+)).Host))
+| where isnotempty(RemoteHost)
+| where RemoteHost has_any (RMMDomains)
+| lookup kind=leftouter RMMList on $left.RemoteHost == $right.Domain
+| where isempty(RMMTool)
+| summarize ConnectionCount = count(), Devices = make_set(DeviceName) by RemoteHost
+| sort by ConnectionCount desc
+
+
+
+let RMMList = externaldata(URI: string, RMMTool: string)
+    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv']
+    with (format="csv", ignoreFirstRecord=true)
+    | extend RawURI = tolower(trim(@"[ \t\r\n]+", URI))
+    | extend Domain = trim_end(@"\.+", case(
+        RawURI startswith "*.", replace_string(RawURI, "*.", ""),
+        RawURI startswith "*", replace_string(RawURI, "*", ""),
+        RawURI contains "*", replace_regex(RawURI, @".+?\*", ""),
+        RawURI
+    ))
+    | where isnotempty(Domain)
+    | where Domain !in ("github.com", "raw.githubusercontent.com", "ghcr.io", "objects.githubusercontent.com")
+    // Exclude your sanctioned tools
+    | where RMMTool !has "Absolute"
+    | distinct Domain, RMMTool;
+let RMMDomains = toscalar(RMMList | summarize make_set(Domain));
+DeviceNetworkEvents
+| where Timestamp > ago(7d)  // Extended to 7 days
+| where ActionType == "ConnectionSuccess"
+| where isnotempty(RemoteUrl)
+| extend RemoteHost = tolower(tostring(parse_url(case(
+    RemoteUrl startswith "http", RemoteUrl, 
+    strcat("https://", RemoteUrl)
+)).Host))
+| where isnotempty(RemoteHost)
+| where RemoteHost has_any (RMMDomains)
+| lookup kind=leftouter RMMList on $left.RemoteHost == $right.Domain
+| extend RMMTool = iff(isempty(RMMTool), "Unknown - Check Domain", RMMTool)
+| summarize 
+    FirstSeen = min(Timestamp),
+    LastSeen = max(Timestamp),
+    ConnectionCount = count(),
+    Devices = dcount(DeviceId)
+    by RemoteHost, RMMTool
+| sort by Devices desc, ConnectionCount desc
