@@ -1,218 +1,39 @@
-let RMMDomains = dynamic(["teamviewer.com", "anydesk.com", "screenconnect.com", "connectwise.com", "splashtop.com", "rustdesk.com", "meshcentral.com", "tailscale.com", "ngrok.com", "logmein.com", "bomgar.com", "beyondtrustcloud.com"]); // Top 12 sketchy ones
-DeviceNetworkEvents
-| where Timestamp > ago(24h)
-| where ActionType == "ConnectionSuccess"
-| extend RemoteHost = tolower(tostring(parse_url(strcat("https://", RemoteUrl)).Host))
-| where RemoteHost has_any (RMMDomains)
-| summarize ConnectionCount = count(), Devices = dcount(DeviceId) by RemoteHost
-| sort by ConnectionCount desc
-
----
-
-// Pre-process the domain list once
-let RMMList = externaldata(URI: string, RMMTool: string)
-    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv']
-    with (format="csv", ignoreFirstRecord=true)
-    | extend RawURI = tolower(trim(@"[ \t\r\n]+", URI))
-    | extend Domain = trim_end(@"\.+", case(
-        RawURI startswith "*.", replace_string(RawURI, "*.", ""),
-        RawURI startswith "*", replace_string(RawURI, "*", ""),
-        RawURI contains "*", replace_regex(RawURI, @".+?\*", ""),
-        RawURI
-    ))
-    | where isnotempty(Domain)
-    // Filter out the noisy generic domains
-    | where Domain !in ("github.com", "raw.githubusercontent.com", "ghcr.io", "objects.githubusercontent.com")
-    | distinct Domain, RMMTool;
-let RMMDomains = toscalar(RMMList | summarize make_set(Domain));
-DeviceNetworkEvents
-| where Timestamp > ago(1h)
-| where ActionType == "ConnectionSuccess"
-| where isnotempty(RemoteUrl)
-| extend RemoteHost = tolower(tostring(parse_url(case(
-    RemoteUrl startswith "http", RemoteUrl, 
-    strcat("https://", RemoteUrl)
-)).Host))
-| where isnotempty(RemoteHost)
-| where RemoteHost has_any (RMMDomains)
-| lookup kind=leftouter RMMList on $left.RemoteHost == $right.Domain
-| extend RMMTool = iff(isempty(RMMTool), "Unknown - Check Domain", RMMTool)
-| summarize 
-    FirstSeen = min(Timestamp),
-    LastSeen = max(Timestamp),
-    ConnectionCount = count()
-    by DeviceName, DeviceId, RemoteHost, RMMTool
-| sort by ConnectionCount desc
-
----
-
-
-
-
-
-
-
-// Detecting Unauthorized RMM Instances in Your MDE Environment
-let SanctionRMM = dynamic([]); // Empty for now, add approved RMMs later
-let RMMList = externaldata(URI: string, RMMTool: string)
-    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv']
-    with (format="csv", ignoreFirstRecord=true)
-    | extend RawURI = tolower(trim(@"[ \t\r\n]+", URI))
-    | project Domain = trim_end(@"\.+", case(
-        RawURI startswith "*.", replace_string(RawURI, "*.", ""),
-        RawURI startswith "*", replace_string(RawURI, "*", ""),
-        RawURI contains "*", replace_regex(RawURI, @".+?\*", ""),
-        RawURI
-    )), RMMTool
-    | where isnotempty(trim(@"\.+", Domain));
-let RMMDomains = toscalar(RMMList | summarize make_set(Domain));
-DeviceNetworkEvents
-| where Timestamp > ago(24h)
-| where ActionType == "ConnectionSuccess"
-| extend RemoteUrlClean = tolower(tostring(RemoteUrl))
-| extend RemoteHost = case(
-    RemoteUrlClean startswith "http://", tostring(parse_url(RemoteUrlClean).Host),
-    RemoteUrlClean startswith "https://", tostring(parse_url(RemoteUrlClean).Host),
-    tostring(split(RemoteUrlClean, "/")[0])
+DeviceTvmSoftwareInventory
+| where SoftwareName has_any (
+    "anydesk", "teamviewer", "screenconnect", "connectwise", 
+    "rustdesk", "meshcentral", "splashtop", "atera",
+    "supremo", "ultraviewer", "ammyy", "aeroadmin",
+    "getscreen", "fleetdeck", "simplehelp", "bomgar",
+    "netbird", "tailscale", "zerotier", "ngrok",
+    "todesk", "sunlogin", "hoptodesk", "litemanager",
+    "remotepc", "action1", "level", "syncro",
+    "ninja", "datto", "kaseya", "pulseway",
+    "logmein", "gotoassist", "beyondtrust", "radmin",
+    "vnc", "realvnc", "tightvnc", "ultravnc",
+    "remoteutilities", "remote utilities", "meshagent",
+    "tacticalrmm", "comodo", "itarian", "zoho assist"
 )
-| extend RemoteHost = trim(@"\.+", tostring(split(RemoteHost, ":")[0]))
-| where isnotempty(RemoteHost)
-| mv-expand Domain = RMMDomains to typeof(string)
-| extend DomainRoot = trim(@"\.+", Domain)
-| where RemoteHost == DomainRoot
-    or RemoteHost endswith strcat(".", DomainRoot)
-    or (Domain startswith "-" and RemoteHost endswith Domain)
-| lookup RMMList on $left.DomainRoot == $right.Domain  // Get the tool name back
-| summarize 
-    FirstSeen = min(Timestamp),
-    LastSeen = max(Timestamp),
-    ConnectionCount = count(),
-    Devices = make_set(DeviceName)
-    by RemoteHost, RMMTool
-| sort by ConnectionCount desc
+| summarize Devices = make_set(DeviceName) by SoftwareName, SoftwareVendor
+| extend DeviceCount = array_length(Devices)
+| sort by DeviceCount desc
 
-
----
-| tstats summariesonly=t count min(_time) as firstTime max(_time) as lastTime
-    from datamodel=Network_Resolution
-    where nodename=DNS DNS.message_type=Query
-    by DNS.src DNS.query sourcetype
-| `drop_dm_object_name("DNS")`
-| lookup rmm_tools URI AS query OUTPUT RMM_Tool
-| search RMM_Tool=*
-| eval duration_hours = round((lastTime - firstTime) / 3600, 2)
-| where count > 10 OR duration_hours > 24
-| stats 
-    sum(count) as total_lookups
-    min(firstTime) as firstTime 
-    max(lastTime) as lastTime 
-    values(query) as domains
-    values(sourcetype) as sourcetypes
-    by src, RMM_Tool
-| eval duration_hours = round((lastTime - firstTime) / 3600, 2)
-| `security_content_ctime(firstTime)`
-| `security_content_ctime(lastTime)`
-| sort - total_lookups
-
-
-| tstats summariesonly=t count min(_time) as firstTime max(_time) as lastTime
-    from datamodel=Network_Resolution
-    where nodename=DNS DNS.message_type=Query
-    by DNS.src DNS.query
-| `drop_dm_object_name("DNS")`
-| where count > 5
-| lookup rmm_domains_base domain AS query OUTPUTNEW RMM_Tool
-| rex field=query "(?<domain_base>[^\.]+\.[^\.]+)$"
-| lookup rmm_domains_base domain AS domain_base OUTPUTNEW RMM_Tool AS RMM_Tool_base
-| eval RMM_Tool = coalesce(RMM_Tool, RMM_Tool_base)
-| search RMM_Tool=*
-| stats sum(count) as total_lookups min(firstTime) as firstTime max(lastTime) as lastTime values(query) as domains by src, RMM_Tool
-| `security_content_ctime(firstTime)`
-| `security_content_ctime(lastTime)`
-| sort - total_lookups
-
-
-
-
-
-
-let RMMList = externaldata(URI: string, RMMTool: string)
-    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv']
-    with (format="csv", ignoreFirstRecord=true)
-    | extend RawURI = tolower(trim(@"[ \t\r\n]+", URI))
-    | extend Domain = trim_end(@"\.+", case(
-        RawURI startswith "*.", replace_string(RawURI, "*.", ""),
-        RawURI startswith "*", replace_string(RawURI, "*", ""),
-        RawURI contains "*", replace_regex(RawURI, @".+?\*", ""),
-        RawURI
-    ))
-    | where isnotempty(Domain)
-    | where Domain !in ("github.com", "raw.githubusercontent.com", "ghcr.io", "objects.githubusercontent.com")
-    | distinct Domain, RMMTool;
-let RMMDomains = toscalar(RMMList | summarize make_set(Domain));
-DeviceNetworkEvents
-| where Timestamp > ago(2d)
-| where ActionType == "ConnectionSuccess"
-| where isnotempty(RemoteUrl)
-| extend RemoteHost = tolower(tostring(parse_url(case(
-    RemoteUrl startswith "http", RemoteUrl, 
-    strcat("https://", RemoteUrl)
-)).Host))
-| where isnotempty(RemoteHost)
-| where RemoteHost has_any (RMMDomains)
-| lookup kind=leftouter RMMList on $left.RemoteHost == $right.Domain
-| where isempty(RMMTool)
-| summarize ConnectionCount = count(), Devices = make_set(DeviceName) by RemoteHost
-| sort by ConnectionCount desc
-
-
-
-let RMMList = externaldata(URI: string, RMMTool: string)
-    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv']
-    with (format="csv", ignoreFirstRecord=true)
-    | extend RawURI = tolower(trim(@"[ \t\r\n]+", URI))
-    | extend Domain = trim_end(@"\.+", case(
-        RawURI startswith "*.", replace_string(RawURI, "*.", ""),
-        RawURI startswith "*", replace_string(RawURI, "*", ""),
-        RawURI contains "*", replace_regex(RawURI, @".+?\*", ""),
-        RawURI
-    ))
-    | where isnotempty(Domain)
-    | where Domain !in ("github.com", "raw.githubusercontent.com", "ghcr.io", "objects.githubusercontent.com")
-    // Exclude your sanctioned tools
-    | where RMMTool !has "Absolute"
-    | distinct Domain, RMMTool;
-let RMMDomains = toscalar(RMMList | summarize make_set(Domain));
-DeviceNetworkEvents
-| where Timestamp > ago(7d)  // Extended to 7 days
-| where ActionType == "ConnectionSuccess"
-| where isnotempty(RemoteUrl)
-| extend RemoteHost = tolower(tostring(parse_url(case(
-    RemoteUrl startswith "http", RemoteUrl, 
-    strcat("https://", RemoteUrl)
-)).Host))
-| where isnotempty(RemoteHost)
-| where RemoteHost has_any (RMMDomains)
-| lookup kind=leftouter RMMList on $left.RemoteHost == $right.Domain
-| extend RMMTool = iff(isempty(RMMTool), "Unknown - Check Domain", RMMTool)
-| summarize 
-    FirstSeen = min(Timestamp),
-    LastSeen = max(Timestamp),
-    ConnectionCount = count(),
-    Devices = dcount(DeviceId)
-    by RemoteHost, RMMTool
-| sort by Devices desc, ConnectionCount desc
-
-
-
-DeviceNetworkEvents
+DeviceProcessEvents
 | where Timestamp > ago(7d)
-| where ActionType == "ConnectionSuccess"
-| where RemoteUrl has_any ("netbird.io", "netbird", "my-sharepoint-inc.com", "my1cloudlive.com", "my2cloudlive.com")
+| where FileName has_any (
+    "anydesk", "teamviewer", "screenconnect", 
+    "rustdesk", "meshagent", "splashtop", "atera",
+    "supremo", "ultraviewer", "ammyy", "aeroadmin",
+    "netbird", "tailscale", "zerotier", "ngrok",
+    "todesk", "sunlogin", "hoptodesk", "litemanager",
+    "remotepc", "action1", "syncromsp",
+    "logmein", "gotoassist", "bomgar", "radmin",
+    "tvnserver", "vncserver", "winvnc",
+    "remoteutilities", "rutserv", "rfusclient",
+    "tacticalrmm", "meshcentral"
+)
 | summarize 
     FirstSeen = min(Timestamp),
     LastSeen = max(Timestamp),
-    ConnectionCount = count(),
-    RemoteUrls = make_set(RemoteUrl)
-    by DeviceName, DeviceId
-| sort by ConnectionCount desc
+    ExecutionCount = count()
+    by DeviceName, FileName, FolderPath
+| sort by ExecutionCount desc
