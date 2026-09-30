@@ -1,3 +1,57 @@
+let RMMDomains = dynamic(["teamviewer.com", "anydesk.com", "screenconnect.com", "connectwise.com", "splashtop.com", "rustdesk.com", "meshcentral.com", "tailscale.com", "ngrok.com", "logmein.com", "bomgar.com", "beyondtrustcloud.com"]); // Top 12 sketchy ones
+DeviceNetworkEvents
+| where Timestamp > ago(24h)
+| where ActionType == "ConnectionSuccess"
+| extend RemoteHost = tolower(tostring(parse_url(strcat("https://", RemoteUrl)).Host))
+| where RemoteHost has_any (RMMDomains)
+| summarize ConnectionCount = count(), Devices = dcount(DeviceId) by RemoteHost
+| sort by ConnectionCount desc
+
+---
+
+// Pre-process the domain list once
+let RMMList = externaldata(URI: string, RMMTool: string)
+    [h'https://raw.githubusercontent.com/magicsword-io/LOLRMM/main/website/public/api/rmm_domains.csv']
+    with (format="csv", ignoreFirstRecord=true)
+    | extend RawURI = tolower(trim(@"[ \t\r\n]+", URI))
+    | extend Domain = trim_end(@"\.+", case(
+        RawURI startswith "*.", replace_string(RawURI, "*.", ""),
+        RawURI startswith "*", replace_string(RawURI, "*", ""),
+        RawURI contains "*", replace_regex(RawURI, @".+?\*", ""),
+        RawURI
+    ))
+    | where isnotempty(Domain)
+    // Filter out the noisy generic domains
+    | where Domain !in ("github.com", "raw.githubusercontent.com", "ghcr.io", "objects.githubusercontent.com")
+    | distinct Domain, RMMTool;
+let RMMDomains = toscalar(RMMList | summarize make_set(Domain));
+DeviceNetworkEvents
+| where Timestamp > ago(1h)
+| where ActionType == "ConnectionSuccess"
+| where isnotempty(RemoteUrl)
+| extend RemoteHost = tolower(tostring(parse_url(case(
+    RemoteUrl startswith "http", RemoteUrl, 
+    strcat("https://", RemoteUrl)
+)).Host))
+| where isnotempty(RemoteHost)
+| where RemoteHost has_any (RMMDomains)
+| lookup kind=leftouter RMMList on $left.RemoteHost == $right.Domain
+| extend RMMTool = iff(isempty(RMMTool), "Unknown - Check Domain", RMMTool)
+| summarize 
+    FirstSeen = min(Timestamp),
+    LastSeen = max(Timestamp),
+    ConnectionCount = count()
+    by DeviceName, DeviceId, RemoteHost, RMMTool
+| sort by ConnectionCount desc
+
+---
+
+
+
+
+
+
+
 // Detecting Unauthorized RMM Instances in Your MDE Environment
 let SanctionRMM = dynamic([]); // Empty for now, add approved RMMs later
 let RMMList = externaldata(URI: string, RMMTool: string)
