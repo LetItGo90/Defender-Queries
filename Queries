@@ -1,76 +1,23 @@
-IOCs
-More IPs available on Citrix's authenticated support portal and in Poppelgaard's checker (~98 total).
-IPs
-• 149.104.78.141
-• 213.209.159.55
-• 77.83.199.39
-• 104.248.244.66
-• 78.47.24.217
-• 139.180.152.138
-• 162.33.178.9
-• 193.149.176.207
-• 185.94.209.12
-• 45.141.21.130
-• 64.94.85.67
-• 31.56.197.72
-• 23.27.143.20
-• 103.41.70.207
-
-Domains
-• f.pylrk.cc
-• www.pylrk.cc
-• entretiensol.com
-• echvista.com
-• *.instances.httpworkbench.com
-
-File Hashes (SHA-256)
-• 6f5a2a452a7901323abd21879c6cecccb47c06aeeaccb1b467212f3b11e4b1e7
-Partial hashes (full versions on Citrix portal): 0188b0eb and b9b0a438
-
-File Paths to Check
-• /var/netscaler/logon/LogonPoint/custom/.ctxs.receiver
-• /var/netscaler/logon/LogonPoint/.local_journal
-• /var/netscaler/logon/LogonPoint/insight-new.js
-• /var/netscaler/logon/LogonPoint/xua.html
-• /var/tmp/.host
-• /var/tmp/.nsmon
-• /var/python/bin/customsnmpd
-• /tmp/.uxdport
-• /tmp/.uxdlock
-• /tmp/update_result_3567cs.tgz
-• /var/core/.ns-cache/client.crt
-• /var/core/.ns-cache/client.key
-• Any .ico / .sig / .deb files in plugin directories
-
-Backdoor Accounts & Config Changes
-• sec_monitor superuser in ns.conf
-• /bin/sh with mode 6555 (SUID)
-• Unauthorized AddHandler / SetHandler / Alias in httpd.conf
-• php_flag or php_value in httpd.conf
-• Cron entries in /var/cron/tabs/ pointing to unknown scripts
-• Modified /nsconfig/rc.netscaler or /nsconfig/nsafter.sh
-
-Malware
-WHIPSHOT — PHP webshell. Hides as .ico/.sig/.deb files. Uses HTTP_X_UX headers. Returns fake 404s.
-SLAPSHOT — Python tunneler. Creates /tmp/.uxdport and /tmp/.uxdlock. Runs on localhost, auto-exits after 10 min idle.
-update_c08937.pl — Perl script. Creates sec_monitor account, steals config, deploys webshell, sets /bin/sh to SUID. Self-deletes.
-main.py / customsnmpd — Python reverse shell to 45.141.21.130:443. Overwrites legit /var/python/bin/customsnmpd.
-Sliver — Off-the-shelf C2. FreeBSD binary at /var/tmp/.host. Phones home to pylrk.cc.
-Platypus — Off-the-shelf C2. Enrolls at entretiensol.com. Uses mDNS on UDP/5353.
-
-Hunt Checklist
-[ ] Look for sec_monitor account in ns.conf
-[ ] Check /bin/sh permissions — should NOT be 6555
-[ ] Check for /tmp/.uxdport and /tmp/.uxdlock (SLAPSHOT)
-[ ] Check /var/netscaler/logon/ for any .ico, .sig, .deb, or .php files that shouldn't be there
-[ ] Check httpd.conf for unauthorized PHP handlers (AddHandler, SetHandler, Alias)
-[ ] Look for weird Python processes that aren't stock NetScaler
-[ ] Check /var/python/bin/customsnmpd — compare size/hash to known good
-[ ] Check for /tmp/update_result_3567cs.tgz (stolen config archive)
-[ ] Check /var/core/.ns-cache/ for stolen certs
-[ ] Check cron tabs and startup scripts (rc.netscaler, nsafter.sh) for persistence
-[ ] Grep logs for pitboss PPE unexpectedly died (log poisoning)
-[ ] Grep logs for username=anonymous or ${IFS} (injection payloads)
-[ ] Grep logs for nsaaad crashes with exit 0x8a (SAML bug / 88779)
-[ ] Check if SAML is configured, if yes, confirm you're on 73.41/64.28
-[ ] Run Poppelgaard's checker script - https://github.com/ThomasPoppelgaard/netscaler-ctx697096-checker
+| makeresults | eval Source="init" | fields - _time
+| append
+    [| inputlookup urlhaus_iocs.csv
+    | search url="*$search_term$*" OR tags="*$search_term$*"
+    | eval Source="URLhaus", IOC=url, Type="URL", Detail=threat, Info=tags
+    | table Source IOC Type Detail Info]
+| append
+    [| inputlookup threatfox_iocs.csv
+    | search ioc="*$search_term$*" OR malware="*$search_term$*"
+    | eval Source="ThreatFox", IOC=ioc, Type=ioc_type, Detail=malware, Info=threat_type
+    | table Source IOC Type Detail Info]
+| append
+    [| inputlookup feodo_c2.csv
+    | search dst_ip="*$search_term$*" OR hostname="*$search_term$*"
+    | eval Source="Feodo C2", IOC=dst_ip, Type="C2 IP", Detail=malware, Info=hostname
+    | table Source IOC Type Detail Info]
+| append
+    [| inputlookup malwarebazaar_hashes.csv
+    | search sha256_hash="*$search_term$*" OR md5_hash="*$search_term$*" OR tags="*$search_term$*"
+    | eval Source="MalwareBazaar", IOC=sha256_hash, Type=file_type, Detail=tags, Info=file_name
+    | table Source IOC Type Detail Info]
+| where Source!="init"
+| sort Source
