@@ -1,13 +1,11 @@
-| makeresults | eval Source="init" | fields - _time
-| append
-    [| inputlookup urlhaus_iocs.csv
-    | search url="*$search_term$*" OR tags="*$search_term$*"
-    | eval Source="URLhaus", IOC=url, Type="URL", Detail=threat, Info=tags
-    | table Source IOC Type Detail Info]
+| inputlookup urlhaus_iocs.csv
+| search url="*$search_term$*" OR tags="*$search_term$*"
+| eval Source="URLhaus", IOC=url, Type="URL", Detail=threat, Info=tags
+| table Source IOC Type Detail Info
 | append
     [| inputlookup threatfox_iocs.csv
-    | search ioc="*$search_term$*" OR malware="*$search_term$*"
-    | eval Source="ThreatFox", IOC=ioc, Type=ioc_type, Detail=malware, Info=threat_type
+    | search ioc_value="*$search_term$*" OR malware="*$search_term$*"
+    | eval Source="ThreatFox", IOC=ioc_value, Type=ioc_type, Detail=malware, Info=threat_type
     | table Source IOC Type Detail Info]
 | append
     [| inputlookup feodo_c2.csv
@@ -19,5 +17,4 @@
     | search sha256_hash="*$search_term$*" OR md5_hash="*$search_term$*" OR tags="*$search_term$*"
     | eval Source="MalwareBazaar", IOC=sha256_hash, Type=file_type, Detail=tags, Info=file_name
     | table Source IOC Type Detail Info]
-| where Source!="init"
 | sort Source
