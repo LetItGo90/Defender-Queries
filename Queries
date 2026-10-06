@@ -1,8 +1,9 @@
-#### External Pivot Links
-[Shodan](https://www.shodan.io/search?query=$search_term$) | [Censys]
-(https://search.censys.io/search?resource=hosts&q=$search_term$) | [URLScan.io]
-(https://urlscan.io/search/#$search_term$) | [Cloudflare Radar]
-(https://radar.cloudflare.com/scan?target=$search_term$) | [AlienVault OTX]
-(https://otx.alienvault.com/indicator/search/$search_term$) | [Any.run]
-(https://any.run/report/$search_term$) | [Joe Sandbox]
-(https://www.joesandbox.com/search?q=$search_term$)
+#### External Pivots
+
+- [Shodan](https://www.shodan.io/search?query=$search_term$)
+- [Censys](https://search.censys.io/search?resource=hosts&q=$search_term$)
+- [URLScan.io](https://urlscan.io/search/#$search_term$)
+- [Cloudflare Radar](https://radar.cloudflare.com/scan?target=$search_term$)
+- [AlienVault OTX](https://otx.alienvault.com/indicator/search/$search_term$)
+- [Any.run](https://any.run/report/$search_term$)
+- [Joe Sandbox](https://www.joesandbox.com/search?q=$search_term$)
