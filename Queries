@@ -1,1 +1,25 @@
-s
+index=
+""
+("jfrt/0/7.161.19" OR "JFrog-Access/7.141.17" OR "JFrogArtifactory/7.146.25")
+| table _time src dest dest_port sourcetype action
+
+The JWT kid hash (the actual smoking gun):
+
+index IN (
+""
+"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+| table _time src dest dest_port sourcetype action
+
+And broaden it — don't even filter to the host IP, see if anyone in EPA's environment has seen these strings at all:
+
+index IN 
+("jfrt/0/7.161.19" OR "JFrog-Access/7.141.17" OR "JFrogArtifactory/7.146.25" OR "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+| stats count min(_time) as first max(_time) as last by src dest dest_port
+| convert ctime(first) ctime(last)
+
+That last one is worth running because if the Shodan result is right and this thing is internet-facing on an IPv6 address (2620:117:506f:15::f01c), the traffic might be logged against that IPv6 rather than 10.147.137.46. So also try:
+
+index IN 
+()
+("registry/join" OR "jfrt/0/7.161.19" OR "JFrog-Access/7.141.17" OR "JFrogArtifactory/7.146.25" OR "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+| table _time src dest dest_port action
