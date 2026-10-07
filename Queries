@@ -1,25 +1,14 @@
-index=
-""
-("jfrt/0/7.161.19" OR "JFrog-Access/7.141.17" OR "JFrogArtifactory/7.146.25")
-| table _time src dest dest_port sourcetype action
+POST /access/api/v1/registry/join
+POST /access/api/v1/registry/join/router
+POST /access/api/v1/registry/join/router?override=true
+Key payload indicator: JWT kid = e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855
+Success signal: HTTP 201 response from those endpoints
+Attacker User-Agents (trivially changed, but still worth filtering):
 
-The JWT kid hash (the actual smoking gun):
-
-index IN (
-""
-"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-| table _time src dest dest_port sourcetype action
-
-And broaden it — don't even filter to the host IP, see if anyone in EPA's environment has seen these strings at all:
-
-index IN 
-("jfrt/0/7.161.19" OR "JFrog-Access/7.141.17" OR "JFrogArtifactory/7.146.25" OR "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-| stats count min(_time) as first max(_time) as last by src dest dest_port
-| convert ctime(first) ctime(last)
-
-That last one is worth running because if the Shodan result is right and this thing is internet-facing on an IPv6 address (2620:117:506f:15::f01c), the traffic might be logged against that IPv6 rather than 10.147.137.46. So also try:
-
-index IN 
-()
-("registry/join" OR "jfrt/0/7.161.19" OR "JFrog-Access/7.141.17" OR "JFrogArtifactory/7.146.25" OR "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
-| table _time src dest dest_port action
+jfrt/0/7.161.19 (PoC default)
+JFrog-Access/7.141.17
+JFrogArtifactory/7.146.25
+Scanning/exploitation IPs (Fastly observed):
+213.136.72[.]87, 89.117.49[.]147, 45.33.75[.]219, 23.92.20[.]11, 173.255.226[.]148, 195.154.157[.]234, 62.210.87[.]212, 45.79.190[.]169, 163.172.132[.]245
+CISA Slack IPs (from your team):
+162.241.252[.]89, 199.116.76[.]96, 185.76.79[.]244, 103.144.163[.]152
